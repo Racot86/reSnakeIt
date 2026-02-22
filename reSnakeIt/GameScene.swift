@@ -169,6 +169,7 @@ final class GameScene: SKScene {
 
     private var boardWidth: CGFloat = 0
     private var boardHeight: CGFloat = 0
+    private var boardCornerRadius: CGFloat = 10
     private var cellSize: CGFloat = 0
     private var gridCellInset: CGFloat = 0
     private var gridCellCornerRadius: CGFloat = 0
@@ -234,7 +235,7 @@ final class GameScene: SKScene {
         lastMoveTime = currentTime
 
         advanceSnake()
-        redrawSnake()
+        redrawSnake(animated: true)
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
@@ -322,7 +323,7 @@ private extension GameScene {
 
         let boardBackground = SKShapeNode(
             rectOf: CGSize(width: boardWidth, height: boardHeight),
-            cornerRadius: 10
+            cornerRadius: boardCornerRadius
         )
         boardBackground.fillColor = theme.color(brightness: 0.12, alpha: 1.0)
         boardBackground.strokeColor = theme.color(brightness: 0.95, alpha: 0.08)
@@ -486,11 +487,21 @@ private extension GameScene {
         gameOverOverlay = overlay
     }
 
-    func redrawSnake() {
+    func redrawSnake(animated: Bool = false) {
         for (index, cell) in snakeCells.enumerated() {
             guard index < snakeSegmentNodes.count else { continue }
             let node = snakeSegmentNodes[index]
-            node.position = point(for: cell)
+            let targetPosition = point(for: cell)
+
+            if animated && !isGameOver {
+                let move = SKAction.move(to: targetPosition, duration: currentMoveInterval)
+                move.timingMode = .linear
+                node.removeAction(forKey: "gridMove")
+                node.run(move, withKey: "gridMove")
+            } else {
+                node.removeAction(forKey: "gridMove")
+                node.position = targetPosition
+            }
 
             if index == 0 {
                 node.fillColor = theme.color(brightness: 0.98, alpha: 0.22)
@@ -519,9 +530,9 @@ private extension GameScene {
                 let distance = sqrt(dx * dx + dy * dy)
 
                 let intensity = max(0, 1 - (distance / 2.6))
-                let glowAlpha = baseAlpha + intensity * 0.08
-                let brightness = min(1.0, 0.92 + intensity * 0.05)
-                let lineWidth = 0.5 + intensity * 0.35
+                let glowAlpha = baseAlpha + intensity * 0.13
+                let brightness = min(1.0, 0.93 + intensity * 0.07)
+                let lineWidth = 0.5 + intensity * 0.55
 
                 let node = gridCellNodes[(row * columns) + col]
                 node.strokeColor = theme.color(brightness: brightness, alpha: glowAlpha)
@@ -588,6 +599,32 @@ private extension GameScene {
                     lineWidth: lineWidth
                 )
             }
+
+            // Rounded corner glow (quarter arcs) when a body part is near two borders.
+            if cell.x <= thresholdCells && cell.y <= thresholdCells {
+                let px = 1 - (CGFloat(cell.x) / CGFloat(thresholdCells + 1))
+                let py = 1 - (CGFloat(cell.y) / CGFloat(thresholdCells + 1))
+                addCornerBorderGlow(corner: .bottomLeft, intensity: min(px, py) * bodyWeight)
+            }
+            if cell.x >= columns - 1 - thresholdCells && cell.y <= thresholdCells {
+                let dx = (columns - 1) - cell.x
+                let px = 1 - (CGFloat(dx) / CGFloat(thresholdCells + 1))
+                let py = 1 - (CGFloat(cell.y) / CGFloat(thresholdCells + 1))
+                addCornerBorderGlow(corner: .bottomRight, intensity: min(px, py) * bodyWeight)
+            }
+            if cell.x <= thresholdCells && cell.y >= rows - 1 - thresholdCells {
+                let dy = (rows - 1) - cell.y
+                let px = 1 - (CGFloat(cell.x) / CGFloat(thresholdCells + 1))
+                let py = 1 - (CGFloat(dy) / CGFloat(thresholdCells + 1))
+                addCornerBorderGlow(corner: .topLeft, intensity: min(px, py) * bodyWeight)
+            }
+            if cell.x >= columns - 1 - thresholdCells && cell.y >= rows - 1 - thresholdCells {
+                let dx = (columns - 1) - cell.x
+                let dy = (rows - 1) - cell.y
+                let px = 1 - (CGFloat(dx) / CGFloat(thresholdCells + 1))
+                let py = 1 - (CGFloat(dy) / CGFloat(thresholdCells + 1))
+                addCornerBorderGlow(corner: .topRight, intensity: min(px, py) * bodyWeight)
+            }
         }
     }
 
@@ -632,7 +669,7 @@ private extension GameScene {
     func clampedBorderSegment(start: CGPoint, end: CGPoint) -> (start: CGPoint, end: CGPoint)? {
         let halfW = boardWidth * 0.5
         let halfH = boardHeight * 0.5
-        let borderInset = max(6, cellSize * 0.35) // keep glow off rounded corners
+        let borderInset = max(3, boardCornerRadius * 0.45) // leave room for rounded-corner arc glow
 
         var s = start
         var e = end
@@ -648,6 +685,77 @@ private extension GameScene {
         let length = hypot(e.x - s.x, e.y - s.y)
         guard length > 1 else { return nil }
         return (s, e)
+    }
+
+    enum BorderCorner {
+        case topLeft
+        case topRight
+        case bottomLeft
+        case bottomRight
+    }
+
+    func addCornerBorderGlow(corner: BorderCorner, intensity: CGFloat) {
+        guard intensity > 0.02 else { return }
+
+        let halfW = boardWidth * 0.5
+        let halfH = boardHeight * 0.5
+        let inset = max(3, boardCornerRadius * 0.4)
+        let span = max(cellSize * 1.3, boardCornerRadius * 1.2)
+
+        switch corner {
+        case .topLeft:
+            addBorderGlowSegment(
+                from: CGPoint(x: -halfW + inset, y: halfH),
+                to: CGPoint(x: -halfW + inset + span, y: halfH),
+                intensity: intensity,
+                lineWidth: 1.5
+            )
+            addBorderGlowSegment(
+                from: CGPoint(x: -halfW, y: halfH - inset),
+                to: CGPoint(x: -halfW, y: halfH - inset - span),
+                intensity: intensity,
+                lineWidth: 1.5
+            )
+        case .topRight:
+            addBorderGlowSegment(
+                from: CGPoint(x: halfW - inset, y: halfH),
+                to: CGPoint(x: halfW - inset - span, y: halfH),
+                intensity: intensity,
+                lineWidth: 1.5
+            )
+            addBorderGlowSegment(
+                from: CGPoint(x: halfW, y: halfH - inset),
+                to: CGPoint(x: halfW, y: halfH - inset - span),
+                intensity: intensity,
+                lineWidth: 1.5
+            )
+        case .bottomLeft:
+            addBorderGlowSegment(
+                from: CGPoint(x: -halfW + inset, y: -halfH),
+                to: CGPoint(x: -halfW + inset + span, y: -halfH),
+                intensity: intensity,
+                lineWidth: 1.5
+            )
+            addBorderGlowSegment(
+                from: CGPoint(x: -halfW, y: -halfH + inset),
+                to: CGPoint(x: -halfW, y: -halfH + inset + span),
+                intensity: intensity,
+                lineWidth: 1.5
+            )
+        case .bottomRight:
+            addBorderGlowSegment(
+                from: CGPoint(x: halfW - inset, y: -halfH),
+                to: CGPoint(x: halfW - inset - span, y: -halfH),
+                intensity: intensity,
+                lineWidth: 1.5
+            )
+            addBorderGlowSegment(
+                from: CGPoint(x: halfW, y: -halfH + inset),
+                to: CGPoint(x: halfW, y: -halfH + inset + span),
+                intensity: intensity,
+                lineWidth: 1.5
+            )
+        }
     }
 
     func clearBorderGlow() {
