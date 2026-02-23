@@ -245,6 +245,9 @@ final class GameScene: SKScene {
 
     override func didMove(to view: SKView) {
         loadHighScores()
+        SnakeMusicEngine.shared.startIfNeeded()
+        SnakeMusicEngine.shared.setThemeHue(theme.hue)
+        SnakeMusicEngine.shared.setGameplayMode(isGameplay: false)
         backgroundColor = theme.color(brightness: 0.08, alpha: 1.0)
         anchorPoint = CGPoint(x: 0.5, y: 0.5)
 
@@ -475,6 +478,7 @@ private extension GameScene {
     func setupSnake() {
         // New game = new neon color theme.
         theme = SessionTheme.random()
+        SnakeMusicEngine.shared.setThemeHue(theme.hue)
         backgroundColor = theme.color(brightness: 0.08, alpha: 1.0)
         buildBoard()
         setupHUD()
@@ -653,6 +657,7 @@ private extension GameScene {
 
     func advanceSnake() {
         guard let head = snakeCells.first else { return }
+        var didApplyTurnThisTick = false
 
         if let pendingDirection, !isOpposite(pendingDirection, to: direction) {
             if pendingDirection != direction {
@@ -665,10 +670,15 @@ private extension GameScene {
                 comboExpiresAt = currentFrameTime + comboTurnTimeout
                 score += pointsPerTurn
                 shouldPulseTurnCornerOnNextRedraw = true
+                didApplyTurnThisTick = true
             }
             direction = pendingDirection
         }
         self.pendingDirection = nil
+
+        if didApplyTurnThisTick {
+            SnakeMusicEngine.shared.playTurn(comboCount: turnComboCount)
+        }
 
         let newHead = GridPoint(x: head.x + direction.x, y: head.y + direction.y)
 
@@ -689,6 +699,7 @@ private extension GameScene {
         if didEatBonusFood {
             score += pointsPerBonusFood
             resetStarvationSteps()
+            SnakeMusicEngine.shared.playSpecialFood()
             consumeBonusFood()
         }
 
@@ -699,6 +710,7 @@ private extension GameScene {
             triggerFoodDigestionPulse()
             speedUpSnake()
             resetStarvationSteps()
+            SnakeMusicEngine.shared.playFood()
 
             if snakeCells.count >= columns * rows {
                 foodCell = nil
@@ -718,6 +730,7 @@ private extension GameScene {
         }
 
         score += pointsPerTile
+        SnakeMusicEngine.shared.playMoveBass(speed: currentMoveInterval)
         updateHUD()
 
         if starvationStepsRemaining <= 0 {
@@ -755,6 +768,16 @@ private extension GameScene {
 
     private func triggerGameOver(_ reason: EndReason) {
         isGameOver = true
+        switch reason {
+        case .wall:
+            SnakeMusicEngine.shared.playWallCrash()
+        case .selfBite:
+            SnakeMusicEngine.shared.playSelfBite()
+        case .starved:
+            SnakeMusicEngine.shared.playStarved()
+        case .boardFilled:
+            SnakeMusicEngine.shared.playWin()
+        }
         foodNode?.removeAllActions()
         bonusFoodNode?.removeAllActions()
         let isNewHighScore = recordCurrentRunScore()
@@ -1864,6 +1887,7 @@ private extension GameScene {
 
     func showStartScreenOverlay() {
         isStartScreenPresentation = true
+        SnakeMusicEngine.shared.setGameplayMode(isGameplay: false)
         buildBoard()
         overlayNode.removeAllChildren()
         gameOverOverlay = nil
@@ -1893,6 +1917,7 @@ private extension GameScene {
 
     func startGame() {
         isStartScreenPresentation = false
+        SnakeMusicEngine.shared.setGameplayMode(isGameplay: true)
         hudNode.alpha = 1.0
         overlayNode.removeAllChildren()
         updateHUD()
