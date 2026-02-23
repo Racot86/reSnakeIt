@@ -13,11 +13,21 @@ final class GameOverOverlayNode: SKNode {
     private let panelNode = SKShapeNode()
     private let titleGlowNode = SKLabelNode(fontNamed: "Menlo-Bold")
     private let titleNode = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let reasonGlowNode = SKLabelNode(fontNamed: "Menlo")
+    private let reasonNode = SKLabelNode(fontNamed: "Menlo")
+    private let scoreGlowNode = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let scoreNode = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let recordGlowNode = SKLabelNode(fontNamed: "Menlo")
+    private let recordNode = SKLabelNode(fontNamed: "Menlo")
+    private let menuButtonNode = SKShapeNode()
+    private let menuIconGlowNode = SKLabelNode(fontNamed: "Menlo-Bold")
+    private let menuIconNode = SKLabelNode(fontNamed: "Menlo-Bold")
     private let restartButtonNode = SKShapeNode()
     private let restartGlowLabelNode = SKLabelNode(fontNamed: "Menlo")
     private let restartLabelNode = SKLabelNode(fontNamed: "Menlo")
 
     var onRestart: (() -> Void)?
+    var onMainMenu: (() -> Void)?
 
     private var accentColor: SKColor = .white
     private var panelFillColor: SKColor = SKColor(white: 0.09, alpha: 0.96)
@@ -26,7 +36,7 @@ final class GameOverOverlayNode: SKNode {
     private var nextWordBlinkAttempt: TimeInterval = 0
     private var wordBlinkUntil: TimeInterval = 0
     private var nextCharBlinkAttempt: TimeInterval = 0
-    private var charBlinkUntil: [TimeInterval] = Array(repeating: 0, count: 9) // "GAME OVER"
+    private var charBlinkUntil: [TimeInterval] = Array(repeating: 0, count: 9) // title chars
 
     override init() {
         super.init()
@@ -54,8 +64,8 @@ final class GameOverOverlayNode: SKNode {
             transform: nil
         )
 
-        let panelWidth = min(sceneSize.width * 0.58, max(220, cellSize * 12))
-        let panelHeight = min(sceneSize.height * 0.42, max(120, cellSize * 5.6))
+        let panelWidth = min(sceneSize.width * 0.62, max(250, cellSize * 14))
+        let panelHeight = min(sceneSize.height * 0.58, max(220, cellSize * 10.5))
         panelNode.path = CGPath(
             roundedRect: CGRect(
                 x: -panelWidth * 0.5,
@@ -71,22 +81,70 @@ final class GameOverOverlayNode: SKNode {
         let titleSize = max(14, cellSize * 0.78)
         titleGlowNode.fontSize = titleSize
         titleNode.fontSize = titleSize
-        titleGlowNode.position = CGPoint(x: 0, y: panelHeight * 0.16)
+        titleGlowNode.position = CGPoint(x: 0, y: panelHeight * 0.29)
         titleNode.position = titleGlowNode.position
 
-        let buttonSize = CGSize(width: panelWidth * 0.6, height: max(34, cellSize * 1.45))
-        restartButtonNode.path = CGPath(
+        let reasonSize = max(10, cellSize * 0.42)
+        reasonGlowNode.fontSize = reasonSize
+        reasonNode.fontSize = reasonSize
+        reasonGlowNode.position = CGPoint(x: 0, y: panelHeight * 0.11)
+        reasonNode.position = reasonGlowNode.position
+
+        let scoreSize = max(12, cellSize * 0.5)
+        scoreGlowNode.fontSize = scoreSize
+        scoreNode.fontSize = scoreSize
+        scoreGlowNode.position = CGPoint(x: 0, y: -panelHeight * 0.02)
+        scoreNode.position = scoreGlowNode.position
+
+        let recordSize = max(9, cellSize * 0.34)
+        recordGlowNode.fontSize = recordSize
+        recordNode.fontSize = recordSize
+        recordGlowNode.position = CGPoint(x: 0, y: -panelHeight * 0.14)
+        recordNode.position = recordGlowNode.position
+
+        let buttonHeight = max(34, cellSize * 1.45)
+        let menuButtonSize = CGSize(width: max(buttonHeight, panelWidth * 0.19), height: buttonHeight)
+        let restartButtonSize = CGSize(width: panelWidth * 0.52, height: buttonHeight)
+        let buttonsY = -panelHeight * 0.31
+        let buttonGap = max(10, cellSize * 0.45)
+
+        menuButtonNode.path = CGPath(
             roundedRect: CGRect(
-                x: -buttonSize.width * 0.5,
-                y: -buttonSize.height * 0.5,
-                width: buttonSize.width,
-                height: buttonSize.height
+                x: -menuButtonSize.width * 0.5,
+                y: -menuButtonSize.height * 0.5,
+                width: menuButtonSize.width,
+                height: menuButtonSize.height
             ),
             cornerWidth: 10,
             cornerHeight: 10,
             transform: nil
         )
-        restartButtonNode.position = CGPoint(x: 0, y: -panelHeight * 0.18)
+        menuButtonNode.position = CGPoint(
+            x: -(restartButtonSize.width * 0.5 + buttonGap * 0.5 + menuButtonSize.width * 0.5),
+            y: buttonsY
+        )
+
+        restartButtonNode.path = CGPath(
+            roundedRect: CGRect(
+                x: -restartButtonSize.width * 0.5,
+                y: -restartButtonSize.height * 0.5,
+                width: restartButtonSize.width,
+                height: restartButtonSize.height
+            ),
+            cornerWidth: 10,
+            cornerHeight: 10,
+            transform: nil
+        )
+        restartButtonNode.position = CGPoint(
+            x: menuButtonSize.width * 0.5 + buttonGap * 0.5,
+            y: buttonsY
+        )
+
+        let menuIconSize = max(12, cellSize * 0.58)
+        menuIconGlowNode.fontSize = menuIconSize
+        menuIconNode.fontSize = menuIconSize
+        menuIconNode.position = CGPoint(x: 0, y: -menuIconSize * 0.35)
+        menuIconGlowNode.position = menuIconNode.position
 
         restartLabelNode.fontSize = max(12, cellSize * 0.54)
         restartLabelNode.position = CGPoint(x: 0, y: -restartLabelNode.fontSize * 0.35)
@@ -103,11 +161,46 @@ final class GameOverOverlayNode: SKNode {
 
         titleGlowNode.fontColor = accentColor.withAlphaComponent(0.24)
         titleNode.fontColor = accentColor.withAlphaComponent(0.95)
+        reasonGlowNode.fontColor = accentColor.withAlphaComponent(0.14)
+        reasonNode.fontColor = accentColor.withAlphaComponent(0.72)
+        scoreGlowNode.fontColor = accentColor.withAlphaComponent(0.18)
+        scoreNode.fontColor = accentColor.withAlphaComponent(0.9)
+        recordGlowNode.fontColor = accentColor.withAlphaComponent(0.12)
+        recordNode.fontColor = accentColor.withAlphaComponent(0.7)
+
+        menuButtonNode.fillColor = accentColor.withAlphaComponent(0.05)
+        menuButtonNode.strokeColor = accentColor.withAlphaComponent(0.3)
+        menuIconGlowNode.fontColor = accentColor.withAlphaComponent(0.18)
+        menuIconNode.fontColor = accentColor.withAlphaComponent(0.92)
 
         restartButtonNode.fillColor = accentColor.withAlphaComponent(0.05)
         restartButtonNode.strokeColor = accentColor.withAlphaComponent(0.3)
         restartGlowLabelNode.fontColor = accentColor.withAlphaComponent(0.18)
         restartLabelNode.fontColor = accentColor.withAlphaComponent(0.92)
+    }
+
+    func setOutcome(title: String, reason: String) {
+        titleGlowNode.text = title
+        titleNode.text = title
+        reasonGlowNode.text = reason
+        reasonNode.text = reason
+        charBlinkUntil = Array(repeating: 0, count: max(1, title.count))
+    }
+
+    func setScoreInfo(score: Int, hiScore: Int, isNewHighScore: Bool) {
+        scoreGlowNode.text = "SCORE \(score)"
+        scoreNode.text = "SCORE \(score)"
+        if isNewHighScore {
+            recordGlowNode.text = "NEW HI SCORE"
+            recordNode.text = "NEW HI SCORE"
+            recordNode.alpha = 0.92
+            recordGlowNode.alpha = 0.18
+        } else {
+            recordGlowNode.text = "HI \(hiScore)"
+            recordNode.text = "HI \(hiScore)"
+            recordNode.alpha = 0.7
+            recordGlowNode.alpha = 0.12
+        }
     }
 
     func updateEffects(currentTime: TimeInterval) {
@@ -153,6 +246,10 @@ final class GameOverOverlayNode: SKNode {
     }
 
     func handleTap(at pointInScene: CGPoint) -> Bool {
+        if menuButtonNode.contains(pointInScene) {
+            onMainMenu?()
+            return true
+        }
         guard restartButtonNode.contains(pointInScene) else { return false }
         onRestart?()
         return true
@@ -184,6 +281,59 @@ private extension GameOverOverlayNode {
         titleNode.verticalAlignmentMode = .center
         titleNode.horizontalAlignmentMode = .center
         addChild(titleNode)
+
+        reasonGlowNode.text = ""
+        reasonGlowNode.fontColor = SKColor(white: 1.0, alpha: 0.14)
+        reasonGlowNode.verticalAlignmentMode = .center
+        reasonGlowNode.horizontalAlignmentMode = .center
+        addChild(reasonGlowNode)
+
+        reasonNode.text = ""
+        reasonNode.fontColor = SKColor(white: 1.0, alpha: 0.72)
+        reasonNode.verticalAlignmentMode = .center
+        reasonNode.horizontalAlignmentMode = .center
+        addChild(reasonNode)
+
+        scoreGlowNode.text = ""
+        scoreGlowNode.fontColor = SKColor(white: 1.0, alpha: 0.18)
+        scoreGlowNode.verticalAlignmentMode = .center
+        scoreGlowNode.horizontalAlignmentMode = .center
+        addChild(scoreGlowNode)
+
+        scoreNode.text = ""
+        scoreNode.fontColor = SKColor(white: 1.0, alpha: 0.9)
+        scoreNode.verticalAlignmentMode = .center
+        scoreNode.horizontalAlignmentMode = .center
+        addChild(scoreNode)
+
+        recordGlowNode.text = ""
+        recordGlowNode.fontColor = SKColor(white: 1.0, alpha: 0.12)
+        recordGlowNode.verticalAlignmentMode = .center
+        recordGlowNode.horizontalAlignmentMode = .center
+        addChild(recordGlowNode)
+
+        recordNode.text = ""
+        recordNode.fontColor = SKColor(white: 1.0, alpha: 0.7)
+        recordNode.verticalAlignmentMode = .center
+        recordNode.horizontalAlignmentMode = .center
+        addChild(recordNode)
+
+        menuButtonNode.fillColor = SKColor(white: 1.0, alpha: 0.08)
+        menuButtonNode.strokeColor = SKColor(white: 1.0, alpha: 0.35)
+        menuButtonNode.lineWidth = 1
+        addChild(menuButtonNode)
+
+        menuIconGlowNode.text = "⌂"
+        menuIconGlowNode.fontColor = SKColor(white: 1.0, alpha: 0.18)
+        menuIconGlowNode.verticalAlignmentMode = .center
+        menuIconGlowNode.horizontalAlignmentMode = .center
+        menuButtonNode.addChild(menuIconGlowNode)
+
+        menuIconNode.text = "⌂"
+        menuIconNode.fontColor = SKColor(white: 1.0, alpha: 0.9)
+        menuIconNode.verticalAlignmentMode = .center
+        menuIconNode.horizontalAlignmentMode = .center
+        menuButtonNode.addChild(menuIconNode)
 
         restartButtonNode.fillColor = SKColor(white: 1.0, alpha: 0.08)
         restartButtonNode.strokeColor = SKColor(white: 1.0, alpha: 0.35)
