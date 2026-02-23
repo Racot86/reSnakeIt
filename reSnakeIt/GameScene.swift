@@ -13,6 +13,13 @@ final class GameScene: SKScene {
         let score: Int
     }
 
+    private struct DigestionPulse {
+        let startTime: TimeInterval
+        let segmentDelay: TimeInterval
+        let segmentDuration: TimeInterval
+        let estimatedSegmentCount: Int
+    }
+
     private enum HighScoreStorage {
         static let scoresKey = "reSnakeIt.highScores.v1"
         static let nextTryKey = "reSnakeIt.nextTryNumber.v1"
@@ -231,6 +238,7 @@ final class GameScene: SKScene {
     private var nextTryNumber = 1
     private var currentTryNumber = 0
     private var currentRunSubmitted = false
+    private var digestionPulses: [DigestionPulse] = []
     private var theme = SessionTheme.random()
     private var shouldPulseTurnCornerOnNextRedraw = false
     private var isStartScreenPresentation = false
@@ -512,6 +520,7 @@ private extension GameScene {
         snakeTurnPulseStart.removeAll()
         snakeTurnPulseUntil.removeAll()
         snakeTurnPulseStrength.removeAll()
+        digestionPulses.removeAll()
         overlayNode.removeAllChildren()
         gameOverOverlay = nil
 
@@ -552,6 +561,7 @@ private extension GameScene {
         snakeTurnPulseStart.removeAll()
         snakeTurnPulseUntil.removeAll()
         snakeTurnPulseStrength.removeAll()
+        digestionPulses.removeAll()
         clearBorderGlow()
         lastDisplayedComboCount = 0
         starvationStepsRemaining = 0
@@ -686,6 +696,7 @@ private extension GameScene {
             appendSnakeSegmentNode()
             foodEatenCount += 1
             score += pointsPerFood
+            triggerFoodDigestionPulse()
             speedUpSnake()
             resetStarvationSteps()
 
@@ -756,6 +767,7 @@ private extension GameScene {
             node.fillColor = theme.color(brightness: 0.9, alpha: 0.1)
         }
         clearBorderGlow()
+        digestionPulses.removeAll()
 
         let overlay = GameOverOverlayNode()
         overlay.updateLayout(sceneSize: size, cellSize: cellSize)
@@ -1478,17 +1490,19 @@ private extension GameScene {
                 proximityBoost = max(0, 1 - (distance / radius))
             }
             let turnPulse = turnPulseAmount(for: index, currentTime: currentTime)
+            let digestionPulse = digestionPulseAmount(for: index, currentTime: currentTime)
 
             let alpha = blinking
                 ? baseAlpha * 0.2
-                : min(1.0, baseAlpha * jitter + proximityBoost * 0.28 + turnPulse * 0.42)
+                : min(1.0, baseAlpha * jitter + proximityBoost * 0.28 + turnPulse * 0.42 + digestionPulse * 0.5)
             let brightness = blinking
                 ? max(0.7, baseBrightness - 0.15)
-                : min(1.0, baseBrightness + CGFloat.random(in: -0.02...0.03) + proximityBoost * 0.08 + turnPulse * 0.14)
+                : min(1.0, baseBrightness + CGFloat.random(in: -0.02...0.03) + proximityBoost * 0.08 + turnPulse * 0.14 + digestionPulse * 0.18)
             node.strokeColor = theme.color(brightness: brightness, alpha: alpha)
             node.lineWidth = baseLineWidth
                 + proximityBoost * max(0.25, cellSize * 0.03)
                 + turnPulse * max(0.4, cellSize * 0.06)
+                + digestionPulse * max(0.45, cellSize * 0.055)
         }
     }
 
@@ -1546,6 +1560,41 @@ private extension GameScene {
         return max(0, shaped) * snakeTurnPulseStrength[index]
     }
 
+    func triggerFoodDigestionPulse() {
+        let now = currentFrameTime > 0 ? currentFrameTime : CACurrentMediaTime()
+        let pulse = DigestionPulse(
+            startTime: now,
+            segmentDelay: max(0.045, currentMoveInterval * 0.9),
+            segmentDuration: max(0.12, currentMoveInterval * 0.75),
+            estimatedSegmentCount: max(1, snakeSegmentNodes.count)
+        )
+        digestionPulses.append(pulse)
+    }
+
+    func digestionPulseAmount(for index: Int, currentTime: TimeInterval) -> CGFloat {
+        guard !digestionPulses.isEmpty else { return 0 }
+
+        var strongest: CGFloat = 0
+        digestionPulses.removeAll { pulse in
+            let endTime = pulse.startTime
+                + pulse.segmentDelay * Double(max(pulse.estimatedSegmentCount, snakeSegmentNodes.count) + 1)
+                + pulse.segmentDuration
+            if currentTime > endTime { return true }
+
+            let segmentStart = pulse.startTime + (Double(index) * pulse.segmentDelay)
+            let segmentEnd = segmentStart + pulse.segmentDuration
+            guard currentTime >= segmentStart, currentTime <= segmentEnd else { return false }
+
+            let t = CGFloat((currentTime - segmentStart) / max(0.001, pulse.segmentDuration))
+            let envelope = sin(t * .pi)
+            let shaped = pow(max(0, envelope), 0.7)
+            strongest = max(strongest, shaped)
+            return false
+        }
+
+        return strongest
+    }
+
     func speedUpSnake() {
         currentMoveInterval = max(minimumMoveInterval, currentMoveInterval - moveIntervalStep)
     }
@@ -1599,7 +1648,7 @@ private extension GameScene {
         hiScoreHUDText.position = CGPoint(x: 0, y: y - max(2, cellSize * 0.12))
         foodHUDText.position = CGPoint(x: -sideX, y: y)
         turnsHUDText.position = CGPoint(x: sideX, y: y)
-        comboHUDText.position = CGPoint(x: -sideX, y: y + max(14, cellSize * 0.75))
+        comboHUDText.position = CGPoint(x: sideX, y: y + max(14, cellSize * 0.75))
     }
 
     func updateHUD() {
