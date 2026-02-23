@@ -768,7 +768,20 @@ private extension GameScene {
         }
         clearBorderGlow()
         digestionPulses.removeAll()
+        fadeOutFoodNodesForDeath()
 
+        let showOverlay: () -> Void = { [weak self] in
+            self?.presentGameOverOverlay(reason: reason, hiScoreValue: hiScoreValue, isNewHighScore: isNewHighScore)
+        }
+
+        if reason == .boardFilled {
+            showOverlay()
+        } else {
+            playDeathAnimation(for: reason, completion: showOverlay)
+        }
+    }
+
+    private func presentGameOverOverlay(reason: EndReason, hiScoreValue: Int, isNewHighScore: Bool) {
         let overlay = GameOverOverlayNode()
         overlay.updateLayout(sceneSize: size, cellSize: cellSize)
         overlay.applyTheme(
@@ -789,6 +802,113 @@ private extension GameScene {
         overlayNode.removeAllChildren()
         overlayNode.addChild(overlay)
         gameOverOverlay = overlay
+    }
+
+    private func fadeOutFoodNodesForDeath() {
+        [foodNode, bonusFoodNode].forEach { node in
+            guard let node else { return }
+            node.removeAllActions()
+            let action = SKAction.group([
+                .fadeAlpha(to: 0.0, duration: 0.12),
+                .scale(to: 0.9, duration: 0.12)
+            ])
+            node.run(action)
+        }
+    }
+
+    private func playDeathAnimation(for reason: EndReason, completion: @escaping () -> Void) {
+        guard !snakeSegmentNodes.isEmpty else {
+            completion()
+            return
+        }
+
+        for node in snakeSegmentNodes {
+            node.removeAllActions()
+        }
+
+        switch reason {
+        case .wall:
+            animateWallDeath(completion: completion)
+        case .selfBite:
+            animateSelfBiteDeath(completion: completion)
+        case .starved:
+            animateStarvationDeath(completion: completion)
+        case .boardFilled:
+            completion()
+        }
+    }
+
+    private func animateWallDeath(completion: @escaping () -> Void) {
+        let stepDelay: TimeInterval = 0.05
+        let segmentDuration: TimeInterval = 0.16
+        let lastIndex = max(0, snakeSegmentNodes.count - 1)
+
+        for (index, node) in snakeSegmentNodes.enumerated() {
+            let preFlash = SKAction.group([
+                .fadeAlpha(to: 1.0, duration: 0.03),
+                .scale(to: 1.05, duration: 0.03)
+            ])
+            let vanish = SKAction.group([
+                .fadeOut(withDuration: segmentDuration),
+                .scale(to: 0.75, duration: segmentDuration)
+            ])
+            let delay = SKAction.wait(forDuration: Double(index) * stepDelay)
+            var actions: [SKAction] = [delay, preFlash, vanish]
+            if index == lastIndex {
+                actions.append(.run(completion))
+            }
+            node.run(.sequence(actions), withKey: "death")
+        }
+    }
+
+    private func animateSelfBiteDeath(completion: @escaping () -> Void) {
+        let centerIndex = max(0, min(1, snakeSegmentNodes.count - 1))
+        let maxDistance = max(1, snakeSegmentNodes.count - 1)
+        let finishDelay = 0.36 + Double(maxDistance) * 0.04
+
+        for (index, node) in snakeSegmentNodes.enumerated() {
+            let distance = abs(index - centerIndex)
+            let delay = SKAction.wait(forDuration: Double(distance) * 0.04)
+            let flash = SKAction.run { [weak self, weak node] in
+                guard let self, let node else { return }
+                node.strokeColor = self.theme.color(brightness: 1.0, alpha: 0.95)
+                node.fillColor = self.theme.color(brightness: 1.0, alpha: 0.18)
+            }
+            let wobble = SKAction.sequence([
+                .moveBy(x: CGFloat.random(in: -4...4), y: CGFloat.random(in: -4...4), duration: 0.05),
+                .moveBy(x: CGFloat.random(in: -3...3), y: CGFloat.random(in: -3...3), duration: 0.05)
+            ])
+            let collapse = SKAction.group([
+                .fadeOut(withDuration: 0.18),
+                .scale(to: 0.7, duration: 0.18)
+            ])
+            node.run(.sequence([delay, flash, wobble, collapse]), withKey: "death")
+        }
+
+        run(.sequence([.wait(forDuration: finishDelay), .run(completion)]), withKey: "selfBiteDeathCompletion")
+    }
+
+    private func animateStarvationDeath(completion: @escaping () -> Void) {
+        var maxDelay: TimeInterval = 0
+
+        for node in snakeSegmentNodes {
+            let delayValue = TimeInterval.random(in: 0.0...0.22)
+            maxDelay = max(maxDelay, delayValue)
+            let delay = SKAction.wait(forDuration: delayValue)
+            let flicker = SKAction.sequence([
+                .fadeAlpha(to: 0.15, duration: 0.03),
+                .fadeAlpha(to: 0.9, duration: 0.025),
+                .fadeAlpha(to: 0.08, duration: 0.04),
+                .fadeAlpha(to: 0.6, duration: 0.03)
+            ])
+            let fadeOut = SKAction.group([
+                .fadeOut(withDuration: 0.2),
+                .scale(to: 0.82, duration: 0.2)
+            ])
+            node.run(.sequence([delay, flicker, fadeOut]), withKey: "death")
+        }
+
+        run(.sequence([.wait(forDuration: maxDelay + 0.35), .run(completion)]), withKey: "starveDeathCompletion")
     }
 
     private func gameOverReasonText(for reason: EndReason) -> String {
